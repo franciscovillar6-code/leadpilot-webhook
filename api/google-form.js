@@ -14,13 +14,12 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const data = req.body;
+    const data = req.body || {};
     const answers = data.answers || {};
 
     const getAnswer = (...terms) => {
-      const key = Object.keys(answers).find((currentKey) => {
-        const normalized = currentKey.toLowerCase();
-
+      const key = Object.keys(answers).find((k) => {
+        const normalized = k.toLowerCase();
         return terms.some((term) =>
           normalized.includes(term.toLowerCase())
         );
@@ -29,66 +28,25 @@ module.exports = async function handler(req, res) {
       if (!key) return "";
 
       const value = answers[key];
-
       return Array.isArray(value)
         ? value.join(", ")
         : String(value ?? "");
     };
 
-    // ================================
-    // NORMALIZAR DATOS DEL GOOGLE FORM
-    // ================================
-
     const lead = {
-      sourceRow: data.row,
-      receivedAt: data.receivedAt,
-
       name: getAnswer("Nombre Viajero Principal"),
       email: getAnswer("Mail de contacto"),
       whatsapp: getAnswer("Wpp de Contacto"),
-
-      travelersText: getAnswer(
-        "Cantidad de personas que viajan"
-      ),
-
-      travelDates: getAnswer(
-        "Fechas del viaje"
-      ),
-
-      nights: getAnswer(
-        "Cantidad de noches"
-      ),
-
-      quotationType: getAnswer(
-        "Que tipo de cotización buscas"
-      ),
-
-      parkDays: getAnswer(
-        "Si buscan parques Disney o Universal"
-      ),
-
-      carDetails: getAnswer(
-        "Solo si seleccionaste la opción de Auto"
-      ),
-
-      documents: getAnswer(
-        "Tenes Visa / Pasaporte",
-        "Visa / Pasaporte"
-      ),
-
-      firstTrip: getAnswer(
-        "Es su primer viaje",
-        "primer viaje a Disney"
-      ),
-
-      source: getAnswer(
-        "Como nos conociste"
-      ),
-
-      instagram: getAnswer(
-        "Instagram de Contacto"
-      ),
-
+      travelersText: getAnswer("Cantidad de personas que viajan"),
+      travelDates: getAnswer("Fechas del viaje"),
+      nights: getAnswer("Cantidad de noches"),
+      quotationType: getAnswer("Que tipo de cotización buscas"),
+      parkDays: getAnswer("Si buscan parques Disney o Universal"),
+      carDetails: getAnswer("Solo si seleccionaste la opción de Auto"),
+      documents: getAnswer("Visa / Pasaporte"),
+      firstTrip: getAnswer("primer viaje a Disney"),
+      source: getAnswer("Como nos conociste"),
+      instagram: getAnswer("Instagram de Contacto"),
       comments: getAnswer(
         "requerimiento especial",
         "algo que quieras aclarar"
@@ -97,173 +55,227 @@ module.exports = async function handler(req, res) {
 
     console.log("Lead normalizado:", lead);
 
-    // ================================
+    // =========================
     // GEMINI
-    // ================================
+    // =========================
 
     const geminiApiKey =
       process.env.GOOGLE_GENERATIVE_AI_API_KEY;
 
     if (!geminiApiKey) {
-      throw new Error(
-        "Falta GOOGLE_GENERATIVE_AI_API_KEY"
-      );
+      throw new Error("Falta GOOGLE_GENERATIVE_AI_API_KEY");
     }
 
     const prompt = `
-Sos el motor de análisis comercial de LeadPilot AI.
+Sos el motor de análisis comercial de LeadPilot AI para una agencia
+especializada en Disney, Universal, Orlando y Miami.
 
-LeadPilot analiza potenciales clientes de una agencia especializada
-en viajes a Disney, Universal, Orlando y Miami.
+Analizá este lead:
 
-Analizá el siguiente lead y devolvé ÚNICAMENTE un objeto JSON válido.
+Nombre: ${lead.name}
+Email: ${lead.email}
+WhatsApp: ${lead.whatsapp}
+Viajeros: ${lead.travelersText}
+Fechas: ${lead.travelDates}
+Noches: ${lead.nights}
+Cotización solicitada: ${lead.quotationType}
+Parques: ${lead.parkDays}
+Auto: ${lead.carDetails}
+Visa/Pasaporte: ${lead.documents}
+Primer viaje: ${lead.firstTrip}
+Origen: ${lead.source}
+Instagram: ${lead.instagram}
+Comentarios: ${lead.comments}
 
-NO uses markdown.
-NO uses bloques de código.
-NO escribas explicaciones fuera del JSON.
+Evaluá intención de compra, claridad, fechas, viajeros,
+destino, documentación e información faltante.
 
-DATOS DEL CLIENTE
+El score debe ser de 0 a 100.
+priority e intentLevel solo pueden ser:
+"high", "medium" o "low".
 
-Nombre:
-${lead.name}
+Si no hay presupuesto, budget = 0.
+Si no sabés cantidad de viajeros, travelers = 0.
+Si solo hay mes y año, podés estimar inicio y fin del mes.
+Si no hay fecha identificable, usar "".
 
-Email:
-${lead.email}
+Respondé ÚNICAMENTE JSON válido con esta estructura:
 
-WhatsApp:
-${lead.whatsapp}
+{
+  "score": 0,
+  "budget": 0,
+  "intent": "",
+  "endDate": "",
+  "priority": "medium",
+  "tripType": "",
+  "startDate": "",
+  "travelers": 0,
+  "nextAction": "",
+  "destination": "",
+  "intentLevel": "medium",
+  "missingInfo": [],
+  "scoreReason": "",
+  "customerInfo": "",
+  "scoreFactors": [
+    {
+      "detail": "",
+      "impact": "positive",
+      "points": 0,
+      "criterion": ""
+    }
+  ],
+  "suggestedResponse": ""
+}
 
-Cantidad y composición de viajeros:
-${lead.travelersText}
+suggestedResponse debe estar en español y lista para enviar al cliente.
+`;
 
-Fechas estimadas o exactas:
-${lead.travelDates}
+    const geminiResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(
+        geminiApiKey
+      )}`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2,
+          },
+        }),
+      }
+    );
 
-Cantidad de noches:
-${lead.nights}
+    const geminiResult = await geminiResponse.json();
 
-Tipo de cotización solicitada:
-${lead.quotationType}
+    if (!geminiResponse.ok) {
+      console.error(
+        "Error Gemini:",
+        JSON.stringify(geminiResult)
+      );
 
-Cantidad de días de parques:
-${lead.parkDays}
+      throw new Error("Gemini no pudo analizar el lead");
+    }
 
-Información de alquiler de auto:
-${lead.carDetails}
+    const aiText =
+      geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text;
 
-Visa / Pasaporte:
-${lead.documents}
+    if (!aiText) {
+      throw new Error("Gemini no devolvió contenido");
+    }
 
-Primer viaje a Disney o Universal:
-${lead.firstTrip}
+    const cleaned = aiText
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
 
-Cómo conoció la agencia:
-${lead.source}
+    const aiAnalysis = JSON.parse(cleaned);
 
-Instagram:
-${lead.instagram}
+    aiAnalysis.score = Math.max(
+      0,
+      Math.min(100, Number(aiAnalysis.score) || 0)
+    );
 
-Comentarios adicionales:
-${lead.comments}
+    if (
+      !["high", "medium", "low"].includes(aiAnalysis.priority)
+    ) {
+      aiAnalysis.priority = "medium";
+    }
 
+    if (
+      !["high", "medium", "low"].includes(
+        aiAnalysis.intentLevel
+      )
+    ) {
+      aiAnalysis.intentLevel = "medium";
+    }
 
-OBJETIVO DEL ANÁLISIS
+    aiAnalysis.budget =
+      Number(aiAnalysis.budget) || 0;
 
-Evaluá:
+    aiAnalysis.travelers =
+      Number(aiAnalysis.travelers) || 0;
 
-- Calidad del lead.
-- Claridad de la solicitud.
-- Cercanía de la fecha del viaje.
-- Cantidad de viajeros.
-- Definición del destino.
-- Definición del producto solicitado.
-- Documentación necesaria para viajar.
-- Información faltante.
-- Señales concretas de intención de compra.
-- Probabilidad de avanzar con una cotización.
+    console.log("Análisis Gemini:", aiAnalysis);
 
-Generá un score comercial entre 0 y 100.
+    // =========================
+    // SUPABASE
+    // =========================
 
-PRIORIDAD
+    const supabaseUrl =
+      process.env.SUPABASE_URL;
 
-high:
-Lead muy completo o con señales concretas de intención de compra.
+    const supabaseSecretKey =
+      process.env.SUPABASE_SECRET_KEY;
 
-medium:
-Lead viable, pero todavía faltan datos importantes.
+    if (!supabaseUrl || !supabaseSecretKey) {
+      throw new Error("Faltan variables de Supabase");
+    }
 
-low:
-Lead poco definido, lejano, incompleto o con baja intención aparente.
+    const supabaseResponse = await fetch(
+      `${supabaseUrl}/rest/v1/leads`,
+      {
+        method: "POST",
+        headers: {
+          apikey: supabaseSecretKey,
+          Authorization: `Bearer ${supabaseSecretKey}`,
+          "Content-Type": "application/json",
+          Prefer: "return=representation",
+        },
+        body: JSON.stringify({
+          form_row: data.row,
+          received_at:
+            data.receivedAt || new Date().toISOString(),
+          answers: answers,
+          status: "pending",
+          score: aiAnalysis.score,
+          priority: aiAnalysis.priority,
+          ai_analysis: aiAnalysis,
+        }),
+      }
+    );
 
+    const savedLead =
+      await supabaseResponse.json();
 
-INTENT LEVEL
+    if (!supabaseResponse.ok) {
+      console.error(
+        "Error Supabase:",
+        JSON.stringify(savedLead)
+      );
 
-Debe ser uno de estos valores:
+      throw new Error(
+        "No se pudo guardar el lead en Supabase"
+      );
+    }
 
-high
-medium
-low
+    return res.status(200).json({
+      success: true,
+      message:
+        "Lead recibido, analizado y guardado correctamente",
+      score: aiAnalysis.score,
+      priority: aiAnalysis.priority,
+      analysis: aiAnalysis,
+      databaseLead: savedLead[0],
+    });
+  } catch (error) {
+    console.error("Error LeadPilot:", error);
 
-
-PRESUPUESTO
-
-Si el cliente no informó presupuesto:
-
-budget = 0
-
-
-FECHAS
-
-Si existen fechas exactas:
-usarlas.
-
-Si solamente se indicó claramente mes y año:
-podés usar como referencia el primer y último día de ese mes.
-
-Si no se puede determinar:
-usar "".
-
-
-VIAJEROS
-
-travelers debe ser un número.
-
-Inferilo de la descripción del formulario.
-
-Ejemplos:
-
-"2 adultos y 2 niños" = 4
-
-"2 adultos" = 2
-
-Si no puede determinarse:
-0
-
-
-DESTINO
-
-Inferilo según la cotización solicitada.
-
-Ejemplos:
-
-Disney World, Orlando
-Universal Orlando
-Orlando
-Miami
-Disney + Universal, Orlando
-
-
-TIPO DE VIAJE
-
-tripType debe resumirse como:
-
-Familia
-Pareja
-Amigos
-Solo
-Grupo
-
-si corresponde.
-
-
-RESPUESTA SUG
+    return res.status(500).json({
+      success: false,
+      message: "Error procesando el lead",
+      error:
+        error instanceof Error
+          ? error.message
+          : String(error),
+    });
+  }
+};
