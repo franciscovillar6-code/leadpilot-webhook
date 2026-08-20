@@ -35,7 +35,10 @@ module.exports = async function handler(req, res) {
         : String(value ?? "");
     };
 
-    // Datos limpios provenientes del Google Form
+    // ================================
+    // NORMALIZAR DATOS DEL GOOGLE FORM
+    // ================================
+
     const lead = {
       sourceRow: data.row,
       receivedAt: data.receivedAt,
@@ -44,13 +47,29 @@ module.exports = async function handler(req, res) {
       email: getAnswer("Mail de contacto"),
       whatsapp: getAnswer("Wpp de Contacto"),
 
-      travelersText: getAnswer("Cantidad de personas que viajan"),
-      travelDates: getAnswer("Fechas del viaje"),
-      nights: getAnswer("Cantidad de noches"),
+      travelersText: getAnswer(
+        "Cantidad de personas que viajan"
+      ),
 
-      quotationType: getAnswer("Que tipo de cotización buscas"),
-      parkDays: getAnswer("Si buscan parques Disney o Universal"),
-      carDetails: getAnswer("Solo si seleccionaste la opción de Auto"),
+      travelDates: getAnswer(
+        "Fechas del viaje"
+      ),
+
+      nights: getAnswer(
+        "Cantidad de noches"
+      ),
+
+      quotationType: getAnswer(
+        "Que tipo de cotización buscas"
+      ),
+
+      parkDays: getAnswer(
+        "Si buscan parques Disney o Universal"
+      ),
+
+      carDetails: getAnswer(
+        "Solo si seleccionaste la opción de Auto"
+      ),
 
       documents: getAnswer(
         "Tenes Visa / Pasaporte",
@@ -62,8 +81,13 @@ module.exports = async function handler(req, res) {
         "primer viaje a Disney"
       ),
 
-      source: getAnswer("Como nos conociste"),
-      instagram: getAnswer("Instagram de Contacto"),
+      source: getAnswer(
+        "Como nos conociste"
+      ),
+
+      instagram: getAnswer(
+        "Instagram de Contacto"
+      ),
 
       comments: getAnswer(
         "requerimiento especial",
@@ -74,7 +98,7 @@ module.exports = async function handler(req, res) {
     console.log("Lead normalizado:", lead);
 
     // ================================
-    // 1. ANÁLISIS CON GEMINI
+    // GEMINI
     // ================================
 
     const geminiApiKey =
@@ -87,229 +111,159 @@ module.exports = async function handler(req, res) {
     }
 
     const prompt = `
-Sos el motor de análisis comercial de LeadPilot AI para una agencia especializada en viajes a Disney y Orlando.
+Sos el motor de análisis comercial de LeadPilot AI.
 
-Analizá este potencial cliente y devolvé ÚNICAMENTE un objeto JSON válido.
-No agregues markdown.
-No agregues explicaciones fuera del JSON.
+LeadPilot analiza potenciales clientes de una agencia especializada
+en viajes a Disney, Universal, Orlando y Miami.
 
-DATOS DEL LEAD:
+Analizá el siguiente lead y devolvé ÚNICAMENTE un objeto JSON válido.
 
-Nombre: ${lead.name}
-Email: ${lead.email}
-WhatsApp: ${lead.whatsapp}
-Viajeros: ${lead.travelersText}
-Fechas: ${lead.travelDates}
-Cantidad de noches: ${lead.nights}
-Cotización buscada: ${lead.quotationType}
-Parques: ${lead.parkDays}
-Auto: ${lead.carDetails}
-Visa/Pasaporte: ${lead.documents}
-Primer viaje: ${lead.firstTrip}
-Origen del lead: ${lead.source}
-Instagram: ${lead.instagram}
-Comentarios adicionales: ${lead.comments}
+NO uses markdown.
+NO uses bloques de código.
+NO escribas explicaciones fuera del JSON.
 
-Tu objetivo es evaluar la viabilidad comercial y la intención de compra.
+DATOS DEL CLIENTE
 
-El score debe ser entre 0 y 100.
+Nombre:
+${lead.name}
 
-Prioridad:
-- high: lead de alta prioridad
-- medium: prioridad media
-- low: baja prioridad
+Email:
+${lead.email}
 
-intentLevel:
-- high
-- medium
-- low
+WhatsApp:
+${lead.whatsapp}
 
-Si no existe un presupuesto informado, budget debe ser 0.
+Cantidad y composición de viajeros:
+${lead.travelersText}
 
-Si no se pueden determinar fechas exactas, podés estimarlas si el cliente indicó claramente mes y año. Si tampoco es posible, usá string vacío.
+Fechas estimadas o exactas:
+${lead.travelDates}
 
-travelers debe ser numérico. Inferilo de la descripción de viajeros. Si no puede determinarse, usar 0.
+Cantidad de noches:
+${lead.nights}
 
-destination debe inferirse de lo que solicita el cliente.
+Tipo de cotización solicitada:
+${lead.quotationType}
 
-tripType debe resumir el tipo de viaje, por ejemplo:
+Cantidad de días de parques:
+${lead.parkDays}
+
+Información de alquiler de auto:
+${lead.carDetails}
+
+Visa / Pasaporte:
+${lead.documents}
+
+Primer viaje a Disney o Universal:
+${lead.firstTrip}
+
+Cómo conoció la agencia:
+${lead.source}
+
+Instagram:
+${lead.instagram}
+
+Comentarios adicionales:
+${lead.comments}
+
+
+OBJETIVO DEL ANÁLISIS
+
+Evaluá:
+
+- Calidad del lead.
+- Claridad de la solicitud.
+- Cercanía de la fecha del viaje.
+- Cantidad de viajeros.
+- Definición del destino.
+- Definición del producto solicitado.
+- Documentación necesaria para viajar.
+- Información faltante.
+- Señales concretas de intención de compra.
+- Probabilidad de avanzar con una cotización.
+
+Generá un score comercial entre 0 y 100.
+
+PRIORIDAD
+
+high:
+Lead muy completo o con señales concretas de intención de compra.
+
+medium:
+Lead viable, pero todavía faltan datos importantes.
+
+low:
+Lead poco definido, lejano, incompleto o con baja intención aparente.
+
+
+INTENT LEVEL
+
+Debe ser uno de estos valores:
+
+high
+medium
+low
+
+
+PRESUPUESTO
+
+Si el cliente no informó presupuesto:
+
+budget = 0
+
+
+FECHAS
+
+Si existen fechas exactas:
+usarlas.
+
+Si solamente se indicó claramente mes y año:
+podés usar como referencia el primer y último día de ese mes.
+
+Si no se puede determinar:
+usar "".
+
+
+VIAJEROS
+
+travelers debe ser un número.
+
+Inferilo de la descripción del formulario.
+
+Ejemplos:
+
+"2 adultos y 2 niños" = 4
+
+"2 adultos" = 2
+
+Si no puede determinarse:
+0
+
+
+DESTINO
+
+Inferilo según la cotización solicitada.
+
+Ejemplos:
+
+Disney World, Orlando
+Universal Orlando
+Orlando
+Miami
+Disney + Universal, Orlando
+
+
+TIPO DE VIAJE
+
+tripType debe resumirse como:
+
 Familia
 Pareja
 Amigos
 Solo
 Grupo
 
-Generá exactamente esta estructura:
+si corresponde.
 
-{
-  "score": 0,
-  "budget": 0,
-  "intent": "",
-  "endDate": "",
-  "priority": "medium",
-  "tripType": "",
-  "startDate": "",
-  "travelers": 0,
-  "nextAction": "",
-  "destination": "",
-  "intentLevel": "medium",
-  "missingInfo": [],
-  "scoreReason": "",
-  "customerInfo": "",
-  "scoreFactors": [
-    {
-      "detail": "",
-      "impact": "positive",
-      "points": 0,
-      "criterion": ""
-    }
-  ],
-  "suggestedResponse": ""
-}
 
-La respuesta sugerida debe estar escrita en español, ser natural, comercial y servir para enviar directamente al cliente por WhatsApp o email.
-`;
-
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
-        geminiApiKey
-      )}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: prompt }],
-            },
-          ],
-          generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2,
-          },
-        }),
-      }
-    );
-
-    const geminiResult = await geminiResponse.json();
-
-    if (!geminiResponse.ok) {
-      console.error("Error Gemini:", geminiResult);
-      throw new Error("Gemini no pudo analizar el lead");
-    }
-
-    const aiText =
-      geminiResult?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!aiText) {
-      throw new Error(
-        "Gemini no devolvió un análisis válido"
-      );
-    }
-
-    const cleanedJson = aiText
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const aiAnalysis = JSON.parse(cleanedJson);
-
-    // Validaciones mínimas
-    aiAnalysis.score = Math.max(
-      0,
-      Math.min(100, Number(aiAnalysis.score) || 0)
-    );
-
-    if (
-      !["high", "medium", "low"].includes(
-        aiAnalysis.priority
-      )
-    ) {
-      aiAnalysis.priority = "medium";
-    }
-
-    console.log("Análisis Gemini:", aiAnalysis);
-
-    // ================================
-    // 2. GUARDAR EN SUPABASE
-    // ================================
-
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseSecretKey =
-      process.env.SUPABASE_SECRET_KEY;
-
-    if (!supabaseUrl || !supabaseSecretKey) {
-      throw new Error(
-        "Faltan variables de Supabase"
-      );
-    }
-
-    const supabaseResponse = await fetch(
-      `${supabaseUrl}/rest/v1/leads`,
-      {
-        method: "POST",
-        headers: {
-          apikey: supabaseSecretKey,
-          Authorization: `Bearer ${supabaseSecretKey}`,
-          "Content-Type": "application/json",
-          Prefer: "return=representation",
-        },
-        body: JSON.stringify({
-          form_row: data.row,
-          received_at:
-            data.receivedAt || new Date().toISOString(),
-
-          // Conservamos el formulario original completo
-          answers: answers,
-
-          status: "pending",
-
-          score: aiAnalysis.score,
-          priority: aiAnalysis.priority,
-
-          // LeadPilot ya entiende esta estructura
-          ai_analysis: aiAnalysis,
-        }),
-      }
-    );
-
-    const savedLead = await supabaseResponse.json();
-
-    if (!supabaseResponse.ok) {
-      console.error("Error Supabase:", savedLead);
-      throw new Error(
-        "No se pudo guardar el lead en Supabase"
-      );
-    }
-
-    console.log("Lead guardado:", savedLead);
-
-    // ================================
-    // 3. RESPUESTA FINAL
-    // ================================
-
-    return res.status(200).json({
-      success: true,
-      message:
-        "Lead recibido, analizado y guardado correctamente",
-      score: aiAnalysis.score,
-      priority: aiAnalysis.priority,
-      analysis: aiAnalysis,
-      databaseLead: savedLead[0],
-    });
-  } catch (error) {
-    console.error("Error LeadPilot:", error);
-
-    return res.status(500).json({
-      success: false,
-      message: "Error procesando el lead",
-      error:
-        error instanceof Error
-          ? error.message
-          : String(error),
-    });
-  }
-};
+RESPUESTA SUG
